@@ -1,0 +1,14 @@
+{
+  "name": "betterprompter",
+  "version": "1.0.0",
+  "description": "Teleprompter con control remoto desde el celular vía WebSocket",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "dependencies": {
+    "express": "^4.21.0",
+    "ws": "^8.18.0"
+  }
+}
