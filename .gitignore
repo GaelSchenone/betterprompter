@@ -24,6 +24,9 @@ Thumbs.db
 .docker/
 docker-compose.override.yml
 
+# Build
+dist/
+
 # Logs
 *.log
 npm-debug.log*

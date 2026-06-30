@@ -1,23 +1,24 @@
-FROM node:20-slim
-
+FROM node:20-slim AS deps
 WORKDIR /app
-
-# Copiar archivos de dependencias
 COPY package.json ./
+RUN npm install
 
-# Instalar con npm (compatible con Dokploy)
-RUN npm install --omit=dev && npm cache clean --force
+FROM node:20-slim AS build
+WORKDIR /app
+COPY --from=deps /app/node_modules ./node_modules
+COPY . .
+RUN npx vite build
 
-# Copiar el resto del código
+FROM node:20-slim AS production
+WORKDIR /app
+COPY --from=deps /app/node_modules ./node_modules
+COPY --from=build /app/dist ./dist
 COPY server.js ./
-COPY public ./public
-
-# No correr como root
-USER node
 
 ENV NODE_ENV=production
 ENV PORT=3001
 
+USER node
 EXPOSE 3001
 
 CMD ["node", "server.js"]
