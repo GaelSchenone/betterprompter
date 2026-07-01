@@ -6,6 +6,7 @@ import os from 'os';
 import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const distPath = path.join(__dirname, 'dist');
 
 // ── Sesiones ──────────────────────────────────────────────
 const sessions = new Map();
@@ -17,97 +18,167 @@ function getOrCreateSession(sessionId) {
       state: { text: '', speed: 120, playing: false, position: 0 },
       display: null,
       controls: new Set(),
+      createdAt: Date.now(),
     });
   }
   return sessions.get(sessionId);
 }
 
+function cleanupSession(sessionId) {
+  const session = sessions.get(sessionId);
+  if (!session) return;
+  if (!session.display && session.controls.size === 0) {
+    sessions.delete(sessionId);
+  }
+}
+
+// Limpiar sesiones viejas cada 30 min
+setInterval(() => {
+  const now = Date.now();
+  for (const [id, session] of sessions) {
+    if (now - session.createdAt > 3_600_000 && !session.display && session.controls.size === 0) {
+      sessions.delete(id);
+    }
+  }
+}, 1_800_000);
+
 // ── Server ────────────────────────────────────────────────
 const app = express();
 const server = http.createServer(app);
+
+// ── CORS ──────────────────────────────────────────────────
+app.use((_req, res, next) => {
+  res.set('Access-Control-Allow-Origin', '*');
+  res.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.set('Access-Control-Allow-Headers', 'Content-Type');
+  next();
+});
+
+// ── Static files (primero) ───────────────────────────────
+app.use(express.static(distPath, { index: 'index.html' }));
+
+// ── API ───────────────────────────────────────────────────
+function getLocalIP() {
+  const nets = os.networkInterfaces();
+  for (const name of Object.keys(nets)) {
+    for (const net of nets[name]) {
+      if (net.family === 'IPv4' && !net.internal) {
+        return net.address;
+      }
+    }
+  }
+  return 'localhost';
+}
+
+app.get('/api/info', (_req, res) => {
+  const port = server.address().port;
+  const ip = getLocalIP();
+  res.json({ ip, port, uptime: process.uptime() });
+});
+
+app.get('/api/health', (_req, res) => {
+  res.json({ status: 'ok', uptime: process.uptime(), sessions: sessions.size });
+});
+
+// ── SPA: cualquier otra ruta va al index.html ────────────
+app.get('*', (_req, res) => {
+  res.sendFile(path.join(distPath, 'index.html'), (err) => {
+    if (err) {
+      console.error('Error al servir index.html:', err.message);
+      res.status(500).send('Error: ' + err.message);
+    }
+  });
+});
+
+// ── WebSocket ─────────────────────────────────────────────
 const wss = new WebSocketServer({ server });
 
 wss.on('connection', (ws, req) => {
-  const url = new URL(req.url, `http://${req.headers.host}`);
-  const sessionId = url.searchParams.get('sessionId');
-  const role = url.searchParams.get('role') || 'control';
+  try {
+    const url = new URL(req.url, `http://${req.headers.host}`);
+    const sessionId = url.searchParams.get('sessionId');
+    const role = url.searchParams.get('role') || 'control';
 
-  if (!sessionId) {
-    ws.close(4000, 'sessionId required');
-    return;
-  }
-
-  const session = getOrCreateSession(sessionId);
-
-  if (role === 'display') {
-    // Reemplazar display anterior si existe
-    if (session.display && session.display.readyState === ws.OPEN) {
-      session.display.close();
+    if (!sessionId || sessionId.length < 3) {
+      ws.close(4000, 'sessionId invalido');
+      return;
     }
-    session.display = ws;
 
-    // Enviar estado actual
-    send(ws, { type: 'state', ...session.state });
+    const session = getOrCreateSession(sessionId);
 
-    ws.on('close', () => {
-      if (session.display === ws) session.display = null;
-      cleanupSession(sessionId);
-    });
-
-    // Display escucha posición
-    ws.on('message', (raw) => {
-      let msg;
-      try { msg = JSON.parse(raw.toString()); } catch { return; }
-      if (msg.type === 'position') {
-        session.state.position = msg.value;
+    if (role === 'display') {
+      if (session.display && session.display.readyState === ws.OPEN) {
+        session.display.close();
       }
+      session.display = ws;
+      send(ws, { type: 'state', ...session.state });
+
+      ws.on('message', (raw) => {
+        try {
+          const msg = JSON.parse(raw.toString());
+          if (msg.type === 'position') {
+            session.state.position = msg.value;
+          }
+        } catch { /* ignore malformed */ }
+      });
+
+      ws.on('close', () => {
+        if (session.display === ws) session.display = null;
+        cleanupSession(sessionId);
+      });
+
+    } else {
+      session.controls.add(ws);
+      send(ws, { type: 'state', ...session.state });
+
+      ws.on('message', (raw) => {
+        try {
+          const msg = JSON.parse(raw.toString());
+          switch (msg.type) {
+            case 'speed':
+              session.state.speed = Math.max(0, Math.min(1000, msg.value));
+              broadcastToDisplay(session, { type: 'speed', value: session.state.speed });
+              break;
+            case 'play':
+              session.state.playing = true;
+              broadcastToDisplay(session, { type: 'play' });
+              break;
+            case 'pause':
+              session.state.playing = false;
+              broadcastToDisplay(session, { type: 'pause' });
+              break;
+            case 'togglePlay':
+              session.state.playing = !session.state.playing;
+              broadcastToDisplay(session, { type: session.state.playing ? 'play' : 'pause' });
+              break;
+            case 'jump':
+              broadcastToDisplay(session, { type: 'jump', value: msg.value });
+              break;
+            case 'reset':
+              broadcastToDisplay(session, { type: 'reset' });
+              break;
+            case 'setText':
+              session.state.text = msg.text || '';
+              session.state.position = 0;
+              broadcastToDisplay(session, { type: 'setText', text: session.state.text });
+              break;
+          }
+        } catch { /* ignore malformed */ }
+      });
+
+      ws.on('close', () => {
+        session.controls.delete(ws);
+        cleanupSession(sessionId);
+      });
+    }
+
+    ws.on('error', (err) => {
+      console.error('WS error:', err.message);
     });
 
-  } else {
-    // role === 'control'
-    session.controls.add(ws);
-
-    send(ws, { type: 'state', ...session.state });
-
-    ws.on('close', () => {
-      session.controls.delete(ws);
-      cleanupSession(sessionId);
-    });
-
-    ws.on('message', (raw) => {
-      let msg;
-      try { msg = JSON.parse(raw.toString()); } catch { return; }
-
-      switch (msg.type) {
-        case 'speed':
-          session.state.speed = Math.max(0, Math.min(1000, msg.value));
-          broadcastToDisplay(session, { type: 'speed', value: session.state.speed });
-          break;
-        case 'play':
-          session.state.playing = true;
-          broadcastToDisplay(session, { type: 'play' });
-          break;
-        case 'pause':
-          session.state.playing = false;
-          broadcastToDisplay(session, { type: 'pause' });
-          break;
-        case 'togglePlay':
-          session.state.playing = !session.state.playing;
-          broadcastToDisplay(session, { type: session.state.playing ? 'play' : 'pause' });
-          break;
-        case 'jump':
-          broadcastToDisplay(session, { type: 'jump', value: msg.value });
-          break;
-        case 'reset':
-          broadcastToDisplay(session, { type: 'reset' });
-          break;
-        case 'setText':
-          session.state.text = msg.text || '';
-          session.state.position = 0;
-          broadcastToDisplay(session, { type: 'setText', text: session.state.text });
-          break;
-      }
-    });
+  } catch (err) {
+    console.error('Error en conexion WS:', err.message);
+    ws.close(4000, 'Error interno');
   }
 });
 
@@ -123,45 +194,22 @@ function broadcastToDisplay(session, data) {
   }
 }
 
-function cleanupSession(sessionId) {
-  const session = sessions.get(sessionId);
-  if (!session) return;
-  // Solo limpiar si no hay display ni controles
-  if (!session.display && session.controls.size === 0) {
-    sessions.delete(sessionId);
-  }
-}
-
-// ── Static files ──────────────────────────────────────────
-const distPath = path.join(__dirname, 'dist');
-app.use(express.static(distPath));
-
-// ── API ───────────────────────────────────────────────────
-function getLocalIP() {
-  const nets = os.networkInterfaces();
-  for (const name of Object.keys(nets)) {
-    for (const net of nets[name]) {
-      if (net.family === 'IPv4' && !net.internal) {
-        return net.address;
-      }
-    }
-  }
-  return 'localhost';
-}
-
-app.get('/api/info', (req, res) => {
-  const port = server.address().port;
-  const ip = getLocalIP();
-  res.json({ ip, port });
+// ── Error handler global ─────────────────────────────────
+app.use((err, _req, res, _next) => {
+  console.error('Error no capturado:', err);
+  res.status(500).send('Error interno del servidor');
 });
 
-// ── SPA: servir index.html para todas las rutas ──────────
-app.get('*', (req, res) => {
-  res.sendFile(path.join(distPath, 'index.html'));
+process.on('uncaughtException', (err) => {
+  console.error('Uncaught Exception:', err);
+});
+
+process.on('unhandledRejection', (err) => {
+  console.error('Unhandled Rejection:', err);
 });
 
 // ── Start ─────────────────────────────────────────────────
-const PORT = process.env.PORT || 3001;
+const PORT = parseInt(process.env.PORT || '3001', 10);
 server.listen(PORT, '0.0.0.0', () => {
   const ip = getLocalIP();
   console.log('');
@@ -170,6 +218,7 @@ server.listen(PORT, '0.0.0.0', () => {
   console.log('Display:   http://' + ip + ':' + PORT + '/');
   console.log('Control:   http://' + ip + ':' + PORT + '/control/<session>');
   console.log('Local:     http://localhost:' + PORT);
+  console.log('Health:    http://localhost:' + PORT + '/api/health');
   console.log('Abri la raiz en la laptop y escanea el QR desde el celular.');
   console.log('');
 });
