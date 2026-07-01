@@ -32,7 +32,8 @@ export default function Display() {
   const [fontSize, setFontSize] = useState(48);
   const [connected, setConnected] = useState(false);
   const [showToolbar, setShowToolbar] = useState(true);
-  const [showQR, setShowQR] = useState(false);
+  const [qrMounted, setQrMounted] = useState(false);
+  const [qrVisible, setQrVisible] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [modalText, setModalText] = useState('');
 
@@ -43,6 +44,7 @@ export default function Display() {
   const animRef = useRef(null);
   const lastTimeRef = useRef(0);
   const toolbarTimerRef = useRef(null);
+  const qrCloseTimerRef = useRef(null);
   const containerRef = useRef(null);
 
   playingRef.current = playing;
@@ -177,7 +179,7 @@ export default function Display() {
       }
       if (e.key === 'm' || e.key === 'M') setMirrored(v => !v);
       if (e.key === 'f' || e.key === 'F') toggleFullscreen();
-      if (e.key === 'Escape') { setShowModal(false); setShowQR(false); }
+      if (e.key === 'Escape') { setShowModal(false); if (qrMounted) toggleQR(); }
     };
     document.addEventListener('keydown', handler);
     return () => document.removeEventListener('keydown', handler);
@@ -186,6 +188,28 @@ export default function Display() {
   // ── Control URL ────────────────────────
   const controlUrl = `${location.origin}/control/${sessionId}`;
   const qrSrc = `https://api.qrserver.com/v1/create-qr-code/?size=280x280&data=${encodeURIComponent(controlUrl)}`;
+
+  function toggleQR() {
+    if (qrMounted) {
+      setQrVisible(false);
+      clearTimeout(qrCloseTimerRef.current);
+      qrCloseTimerRef.current = setTimeout(() => setQrMounted(false), 300);
+    } else {
+      clearTimeout(qrCloseTimerRef.current);
+      setQrMounted(true);
+      requestAnimationFrame(() => setQrVisible(true));
+    }
+  }
+
+  // ── Auto-close QR on connect ────────────
+  useEffect(() => {
+    if (connected && qrMounted) {
+      setQrVisible(false);
+      clearTimeout(qrCloseTimerRef.current);
+      qrCloseTimerRef.current = setTimeout(() => setQrMounted(false), 300);
+    }
+    return () => clearTimeout(qrCloseTimerRef.current);
+  }, [connected]);
 
   function handleApplyText() {
     const t = modalText.trim();
@@ -247,7 +271,7 @@ export default function Display() {
         </div>
 
         <TBtn onClick={toggleFullscreen} title="Fullscreen (F)"><Maximize size={18} /></TBtn>
-        <TBtn onClick={() => setShowQR(v => !v)} title="QR"><QrCode size={18} /></TBtn>
+        <TBtn onClick={toggleQR} title="QR"><QrCode size={18} /></TBtn>
       </div>
 
       {/* Scroll text */}
@@ -293,13 +317,17 @@ export default function Display() {
       </div>
 
       {/* QR */}
-      {showQR && (
+      {qrMounted && (
         <div data-stop style={{
           position: 'fixed', bottom: 80, right: 20, zIndex: 50,
           background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(12px)',
           border: '1px solid rgba(255,255,255,0.03)', borderRadius: 12, padding: 16,
           textAlign: 'center', fontFamily: 'system-ui, sans-serif',
           display: 'flex', flexDirection: 'column', alignItems: 'center',
+          opacity: qrVisible ? 1 : 0,
+          transform: `scale(${qrVisible ? 1 : 0.9})`,
+          transition: 'opacity 0.3s ease, transform 0.3s ease',
+          pointerEvents: qrVisible ? 'auto' : 'none',
         }}>
           {/* White-bordered QR image */}
           <div style={{
