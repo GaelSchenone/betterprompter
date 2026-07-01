@@ -158,13 +158,20 @@ export default function Control() {
         <div style={{ fontSize: 14, fontWeight: 600, color: '#ccc' }}>
           BetterPrompter
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#666' }}>
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 5,
+          padding: '2px 8px', borderRadius: 20,
+          background: connected ? 'rgba(249,115,22,0.1)' : 'rgba(255,255,255,0.04)',
+          border: connected ? '1px solid rgba(249,115,22,0.25)' : '1px solid rgba(255,255,255,0.06)',
+          fontSize: 11, color: connected ? '#f97316' : '#666',
+          transition: 'all 0.3s',
+        }}>
           <span style={{
-            width: 6, height: 6, borderRadius: '50%',
-            background: connected ? '#00ff88' : '#555',
-            boxShadow: connected ? '0 0 6px #00ff88' : 'none',
+            width: 5, height: 5, borderRadius: '50%', display: 'block',
+            background: connected ? '#f97316' : '#444',
+            transition: 'background 0.3s',
           }} />
-          <span>{connected ? 'Conectado' : 'Desconectado'}</span>
+          {connected ? 'Conectado' : 'Desconectado'}
         </div>
       </div>
 
@@ -176,7 +183,7 @@ export default function Control() {
       }}>
         <div style={{
           fontSize: 52, fontWeight: 300, fontVariantNumeric: 'tabular-nums',
-          letterSpacing: -1, color: '#00ff88', lineHeight: 1,
+          letterSpacing: -1, color: '#f97316', lineHeight: 1,
           transition: 'all 0.1s',
         }}>
           {speed}
@@ -210,7 +217,7 @@ export default function Control() {
               : 'rgba(255,255,255,0.04)',
             border: direction === 'backward'
               ? '1px solid rgba(255,255,255,0.15)'
-              : '1px solid rgba(255,255,255,0.03)',
+              : '1px solid rgba(255,255,255,0.06)',
             transition: 'all 0.1s',
             touchAction: 'none',
             WebkitTouchCallout: 'none',
@@ -244,11 +251,11 @@ export default function Control() {
             display: 'flex', flexDirection: 'column', alignItems: 'center',
             justifyContent: 'center', gap: 8,
             background: direction === 'forward'
-              ? 'linear-gradient(180deg, rgba(0,255,136,0.25) 0%, rgba(0,255,136,0.05) 100%)'
-              : 'rgba(0,255,136,0.04)',
+              ? 'linear-gradient(180deg, rgba(249,115,22,0.25) 0%, rgba(249,115,22,0.05) 100%)'
+              : 'rgba(249,115,22,0.04)',
             border: direction === 'forward'
-              ? '1px solid rgba(0,255,136,0.3)'
-              : '1px solid rgba(0,255,136,0.03)',
+              ? '1px solid rgba(249,115,22,0.3)'
+              : '1px solid rgba(249,115,22,0.06)',
             transition: 'all 0.1s',
             touchAction: 'none',
             WebkitTouchCallout: 'none',
@@ -264,7 +271,7 @@ export default function Control() {
           </div>
           <span style={{
             fontSize: 14, fontWeight: 500, letterSpacing: 1,
-            color: direction === 'forward' ? '#00ff88' : '#666',
+            color: direction === 'forward' ? '#f97316' : '#666',
           }}>
             ADELANTE
           </span>
@@ -301,7 +308,7 @@ export default function Control() {
       {/* ── Text input ── */}
       {showTextInput && (
         <div style={{
-          background: '#141414', border: '1px solid rgba(255,255,255,0.03)',
+          background: '#141414', border: '1px solid rgba(255,255,255,0.06)',
           borderRadius: 16, padding: 16,
         }}>
           <textarea
@@ -310,7 +317,7 @@ export default function Control() {
             placeholder="Pega aca tu speech..."
             style={{
               width: '100%', minHeight: 100, background: '#0a0a0a',
-              border: '1px solid rgba(255,255,255,0.03)', borderRadius: 10,
+              border: '1px solid rgba(255,255,255,0.06)', borderRadius: 10,
               color: '#eee', fontSize: 14, lineHeight: 1.5, padding: 12,
               resize: 'vertical', fontFamily: 'system-ui, sans-serif',
               outline: 'none', touchAction: 'auto',
@@ -327,9 +334,9 @@ export default function Control() {
               onClick={handleSendText}
               style={{
                 ...bottomBtn, flex: 1,
-                background: sendFeedback ? '#00ff88' : 'rgba(0,255,136,0.1)',
-                color: sendFeedback ? '#000' : '#00ff88',
-                border: '1px solid rgba(0,255,136,0.2)',
+                background: sendFeedback ? '#f97316' : 'rgba(249,115,22,0.1)',
+                color: sendFeedback ? '#000' : '#f97316',
+                border: '1px solid rgba(249,115,22,0.2)',
               }}
             >
               {sendFeedback ? 'Enviado' : 'Enviar texto'}
@@ -354,7 +361,7 @@ function Triangle({ dir }) {
 // ── Bottom button style ──
 const bottomBtn = {
   flex: 1, padding: '12px 0', borderRadius: 12,
-  border: '1px solid rgba(255,255,255,0.03)',
+  border: '1px solid rgba(255,255,255,0.06)',
   background: 'rgba(255,255,255,0.03)',
   color: '#888', fontSize: 13, fontWeight: 500,
   cursor: 'pointer', fontFamily: 'system-ui, sans-serif',

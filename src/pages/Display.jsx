@@ -237,18 +237,25 @@ export default function Display() {
         background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(12px)',
         padding: '10px 20px', display: 'flex', alignItems: 'center', gap: 10,
         fontFamily: 'system-ui, sans-serif', fontSize: 13,
+        borderBottom: '1px solid rgba(255,255,255,0.06)',
         transform: showToolbar ? 'translateY(0)' : 'translateY(-100%)',
         transition: 'transform 0.3s ease',
       }}>
-        <span style={{
-          width: 8, height: 8, borderRadius: '50%', flexShrink: 0,
-          background: connected ? '#00ff88' : '#555',
-          boxShadow: connected ? '0 0 8px #00ff88' : 'none',
-          transition: 'background 0.3s',
-        }} />
-        <span style={{ color: '#999', fontSize: 12 }}>
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 5,
+          padding: '3px 10px', borderRadius: 20,
+          background: connected ? 'rgba(249,115,22,0.1)' : 'rgba(255,255,255,0.04)',
+          border: connected ? '1px solid rgba(249,115,22,0.25)' : '1px solid rgba(255,255,255,0.06)',
+          fontSize: 11, color: connected ? '#f97316' : '#666',
+          transition: 'all 0.3s',
+        }}>
+          <span style={{
+            width: 5, height: 5, borderRadius: '50%', display: 'block',
+            background: connected ? '#f97316' : '#444',
+            transition: 'background 0.3s',
+          }} />
           {connected ? 'Conectado' : 'Desconectado'}
-        </span>
+        </div>
         <div style={{ flex: 1 }} />
 
         <TBtn onClick={() => { setModalText(text); setShowModal(true); }} title="Texto (T)">
@@ -260,13 +267,13 @@ export default function Display() {
 
         <div style={{
           display: 'flex', alignItems: 'center', gap: 6,
-          background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.03)',
+          background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.08)',
           color: '#ccc', padding: '6px 10px', borderRadius: 6, fontSize: 12,
         }}>
           <span style={{ color: '#999', fontSize: 11 }}>A</span>
           <input type="range" min={20} max={96} value={fontSize}
             onChange={e => setFontSize(Number(e.target.value))}
-            style={{ width: 80, accentColor: '#00ff88' }} />
+            style={{ width: 80, accentColor: '#f97316' }} />
           <span style={{ color: '#999', fontSize: 15 }}>A</span>
         </div>
 
@@ -321,7 +328,7 @@ export default function Display() {
         <div data-stop style={{
           position: 'fixed', bottom: 80, right: 20, zIndex: 50,
           background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(12px)',
-          border: '1px solid rgba(255,255,255,0.03)', borderRadius: 12, padding: 16,
+          border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, padding: 16,
           textAlign: 'center', fontFamily: 'system-ui, sans-serif',
           display: 'flex', flexDirection: 'column', alignItems: 'center',
           opacity: qrVisible ? 1 : 0,
@@ -341,7 +348,7 @@ export default function Display() {
           </div>
           <a href={controlUrl} target="_blank" rel="noopener noreferrer"
             style={{
-              fontSize: 13, color: '#00ff88', textDecoration: 'none',
+              fontSize: 13, color: '#f97316', textDecoration: 'none',
               maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis',
               whiteSpace: 'nowrap', display: 'block',
             }}
@@ -360,7 +367,7 @@ export default function Display() {
           display: 'flex', alignItems: 'center', justifyContent: 'center',
         }} onClick={() => setShowModal(false)}>
           <div style={{
-            background: '#111', border: '1px solid rgba(255,255,255,0.03)',
+            background: '#111', border: '1px solid rgba(255,255,255,0.08)',
             borderRadius: 14, padding: 30, width: '90%', maxWidth: 700,
             maxHeight: '80vh', display: 'flex', flexDirection: 'column',
           }} onClick={e => e.stopPropagation()}>
@@ -371,7 +378,7 @@ export default function Display() {
               placeholder="Pega aca el texto de tu presentacion..."
               style={{
                 flex: 1, minHeight: 300, background: '#1a1a1a',
-                border: '1px solid rgba(255,255,255,0.03)', borderRadius: 8,
+                border: '1px solid rgba(255,255,255,0.08)', borderRadius: 8,
                 color: '#eee', fontSize: 16, lineHeight: 1.6, padding: 16,
                 resize: 'vertical', fontFamily: 'system-ui, sans-serif', outline: 'none',
               }} autoFocus
@@ -389,7 +396,7 @@ export default function Display() {
               <button onClick={handleApplyText}
                 style={{
                   display: 'flex', alignItems: 'center', gap: 6, padding: '10px 24px',
-                  borderRadius: 8, border: 'none', background: '#00ff88',
+                  borderRadius: 8, border: 'none', background: '#f97316',
                   color: '#000', fontSize: 14, fontWeight: 500, cursor: 'pointer',
                   fontFamily: 'system-ui, sans-serif',
                 }}>
@@ -408,8 +415,8 @@ function TBtn({ children, onClick, active, title }) {
     <button onClick={onClick} title={title} style={{
       display: 'flex', alignItems: 'center', gap: 6,
       background: active ? 'rgba(0,255,136,0.15)' : 'rgba(255,255,255,0.06)',
-      border: active ? '1px solid #00ff88' : '1px solid rgba(255,255,255,0.03)',
-      color: active ? '#00ff88' : '#ccc',
+      border: active ? '1px solid #f97316' : '1px solid rgba(255,255,255,0.08)',
+      color: active ? '#f97316' : '#ccc',
       padding: '6px 10px', borderRadius: 6, cursor: 'pointer',
       fontSize: 12, fontFamily: 'system-ui, sans-serif',
       whiteSpace: 'nowrap', transition: 'all 0.2s',
