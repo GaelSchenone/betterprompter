@@ -48,6 +48,23 @@ export default function Display() {
   playingRef.current = playing;
   speedRef.current = speed;
 
+  // ── Disable page overflow ──────────────
+  useEffect(() => {
+    const html = document.documentElement;
+    const body = document.body;
+    const prevHtmlOverflow = html.style.overflow;
+    const prevBodyOverflow = body.style.overflow;
+    const prevOverscroll = html.style.overscrollBehavior;
+    html.style.overflow = 'hidden';
+    body.style.overflow = 'hidden';
+    html.style.overscrollBehavior = 'none';
+    return () => {
+      html.style.overflow = prevHtmlOverflow;
+      body.style.overflow = prevBodyOverflow;
+      html.style.overscrollBehavior = prevOverscroll;
+    };
+  }, []);
+
   // ── WebSocket ──────────────────────────
   useEffect(() => {
     let reconnectTimer;
