@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 
 function wsUrl(sessionId, role) {
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
@@ -18,6 +19,7 @@ export default function Control() {
   const { sessionId } = useParams();
   const [connected, setConnected] = useState(false);
   const [speed, setSpeed] = useState(120);
+  const [baseSpeed, setBaseSpeed] = useState(120); // normal speed (spring-back target)
   const [direction, setDirection] = useState(null); // 'forward' | 'backward' | null
   const [showTextInput, setShowTextInput] = useState(false);
   const [speechText, setSpeechText] = useState('');
@@ -27,7 +29,7 @@ export default function Control() {
   const speedRef = useRef(120);
   const directionRef = useRef(null);
   const startYRef = useRef(0);
-  const baseSpeedRef = useRef(120);
+  const downBaseRef = useRef(120); // base speed at moment of pointer down
   const scrollingRef = useRef(false);
 
   speedRef.current = speed;
@@ -86,15 +88,17 @@ export default function Control() {
     directionRef.current = dir;
     setDirection(dir);
 
-    const currentSpeed = speedRef.current;
-    baseSpeedRef.current = currentSpeed;
+    downBaseRef.current = baseSpeed;
     startYRef.current = e.clientY;
 
-    // Empezar a scrollear
-    const signedSpeed = dir === 'forward' ? currentSpeed : -currentSpeed;
+    // Empezar a scrollear a la velocidad base
+    const startSpeed = baseSpeed;
+    speedRef.current = startSpeed;
+    setSpeed(startSpeed);
+    const signedSpeed = dir === 'forward' ? startSpeed : -startSpeed;
     send({ type: 'speed', value: signedSpeed });
     send({ type: 'play' });
-  }, [send]);
+  }, [send, baseSpeed]);
 
   const handlePointerMove = useCallback((e) => {
     if (!scrollingRef.current) return;
@@ -102,7 +106,7 @@ export default function Control() {
 
     const deltaY = startYRef.current - e.clientY; // positivo = swipe arriba
     const adjustment = Math.round(deltaY / SPEED_SENSITIVITY);
-    let newSpeed = baseSpeedRef.current + adjustment;
+    let newSpeed = downBaseRef.current + adjustment;
     newSpeed = Math.max(MIN_SPEED, Math.min(MAX_SPEED, newSpeed));
 
     if (newSpeed !== speedRef.current) {
@@ -121,8 +125,13 @@ export default function Control() {
     scrollingRef.current = false;
     directionRef.current = null;
     setDirection(null);
+
+    // Spring back a la velocidad base
+    speedRef.current = baseSpeed;
+    setSpeed(baseSpeed);
+    send({ type: 'speed', value: baseSpeed });
     send({ type: 'pause' });
-  }, [send]);
+  }, [send, baseSpeed]);
 
   // ── Text send ──────────────────────────
   const handleSendText = () => {
@@ -197,6 +206,26 @@ export default function Control() {
         </div>
       </div>
 
+      {/* ── Base speed slider ── */}
+      <div style={{
+        background: '#141414', border: '1px solid rgba(255,255,255,0.06)',
+        borderRadius: 12, padding: '8px 14px',
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#666', marginBottom: 2 }}>
+          <span>Velocidad base</span>
+          <span style={{ color: '#f97316' }}>{baseSpeed} px/s</span>
+        </div>
+        <input type="range" min={0} max={500} value={baseSpeed}
+          onChange={e => {
+            const v = Number(e.target.value);
+            setBaseSpeed(v);
+            speedRef.current = v;
+            setSpeed(v);
+            send({ type: 'speed', value: v });
+          }}
+          style={{ width: '100%', height: 4, accentColor: '#f97316', touchAction: 'none' }} />
+      </div>
+
       {/* ── Pedales ── */}
       <div style={{
         flex: 1, display: 'flex', gap: 10,
@@ -223,14 +252,13 @@ export default function Control() {
             WebkitTouchCallout: 'none',
           }}
         >
-          {/* Flecha atras animada */}
           <div style={{
-            display: 'flex', alignItems: 'center', gap: 4,
+            display: 'flex', alignItems: 'center', gap: 2,
             opacity: direction === 'backward' ? 1 : 0.4,
           }}>
-            <Triangle dir="left" />
-            <Triangle dir="left" />
-            <Triangle dir="left" />
+            <ChevronLeft size={28} />
+            <ChevronLeft size={28} />
+            <ChevronLeft size={28} />
           </div>
           <span style={{
             fontSize: 14, fontWeight: 500, letterSpacing: 1,
@@ -262,12 +290,12 @@ export default function Control() {
           }}
         >
           <div style={{
-            display: 'flex', alignItems: 'center', gap: 4,
+            display: 'flex', alignItems: 'center', gap: 2,
             opacity: direction === 'forward' ? 1 : 0.4,
           }}>
-            <Triangle dir="right" />
-            <Triangle dir="right" />
-            <Triangle dir="right" />
+            <ChevronRight size={28} />
+            <ChevronRight size={28} />
+            <ChevronRight size={28} />
           </div>
           <span style={{
             fontSize: 14, fontWeight: 500, letterSpacing: 1,
@@ -345,16 +373,6 @@ export default function Control() {
         </div>
       )}
     </div>
-  );
-}
-
-// ── Componente triangulo ──
-function Triangle({ dir }) {
-  const rotation = dir === 'left' ? 'rotate(180deg)' : 'rotate(0deg)';
-  return (
-    <svg width="20" height="20" viewBox="0 0 24 24" style={{ transform: rotation }}>
-      <path d="M5 12l14-8v16L5 12z" fill="currentColor" />
-    </svg>
   );
 }
 

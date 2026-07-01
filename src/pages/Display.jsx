@@ -28,7 +28,7 @@ export default function Display() {
   const [text, setText] = useState('');
   const [playing, setPlaying] = useState(false);
   const [speed, setSpeed] = useState(120);
-  const [mirrored, setMirrored] = useState(true);
+  const [mirrored, setMirrored] = useState(false);
   const [fontSize, setFontSize] = useState(48);
   const [connected, setConnected] = useState(false);
   const [showToolbar, setShowToolbar] = useState(true);
@@ -371,17 +371,39 @@ export default function Display() {
           position: 'fixed', inset: 0, zIndex: 200,
           background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(8px)',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-        }} onClick={() => setShowModal(false)}>
+        }}>
           <div style={{
             background: '#111', border: '1px solid rgba(255,255,255,0.08)',
             borderRadius: 14, padding: 30, width: '90%', maxWidth: 700,
             maxHeight: '80vh', display: 'flex', flexDirection: 'column',
-          }} onClick={e => e.stopPropagation()}>
+            position: 'relative',
+          }}>
+            {/* Close X */}
+            <button onClick={() => setShowModal(false)}
+              style={{
+                position: 'absolute', top: 14, right: 14,
+                background: 'none', border: 'none', color: '#666',
+                cursor: 'pointer', padding: 4, lineHeight: 0,
+                borderRadius: 6, transition: 'color 0.2s',
+              }}
+              onMouseEnter={e => e.currentTarget.style.color = '#ccc'}
+              onMouseLeave={e => e.currentTarget.style.color = '#666'}
+              title="Cerrar"
+            >
+              <X size={20} />
+            </button>
+
             <h2 style={{ fontFamily: 'system-ui, sans-serif', fontSize: 18, fontWeight: 600, color: '#eee', marginBottom: 16 }}>
               Pega tu speech
             </h2>
             <textarea value={modalText} onChange={e => setModalText(e.target.value)}
-              placeholder="Pega aca el texto de tu presentacion..."
+              onKeyDown={e => {
+                if (e.key === 'Enter' && e.shiftKey) {
+                  e.preventDefault();
+                  handleApplyText();
+                }
+              }}
+              placeholder="Pega aca el texto de tu presentacion...  (Shift+Enter para aplicar)"
               style={{
                 flex: 1, minHeight: 300, background: '#1a1a1a',
                 border: '1px solid rgba(255,255,255,0.08)', borderRadius: 8,
@@ -389,7 +411,12 @@ export default function Display() {
                 resize: 'vertical', fontFamily: 'system-ui, sans-serif', outline: 'none',
               }} autoFocus
             />
-            <div style={{ display: 'flex', gap: 10, marginTop: 16, justifyContent: 'flex-end' }}>
+            <div style={{
+              fontSize: 12, color: '#555', marginTop: 10, textAlign: 'center',
+            }}>
+              Si cancelas se perdera el texto sin guardar
+            </div>
+            <div style={{ display: 'flex', gap: 10, marginTop: 10, justifyContent: 'flex-end' }}>
               <button onClick={() => setShowModal(false)}
                 style={{
                   display: 'flex', alignItems: 'center', gap: 6, padding: '10px 24px',
@@ -397,13 +424,13 @@ export default function Display() {
                   color: '#aaa', fontSize: 14, fontWeight: 500, cursor: 'pointer',
                   fontFamily: 'system-ui, sans-serif',
                 }}>
-                <X size={16} /> Cancelar
+                Cancelar
               </button>
               <button onClick={handleApplyText}
                 style={{
                   display: 'flex', alignItems: 'center', gap: 6, padding: '10px 24px',
                   borderRadius: 8, border: 'none', background: '#f97316',
-                  color: '#000', fontSize: 14, fontWeight: 500, cursor: 'pointer',
+                  color: '#fff', fontSize: 14, fontWeight: 500, cursor: 'pointer',
                   fontFamily: 'system-ui, sans-serif',
                 }}>
                 <Check size={16} /> Aplicar
@@ -420,7 +447,7 @@ function TBtn({ children, onClick, active, title }) {
   return (
     <button onClick={onClick} title={title} style={{
       display: 'flex', alignItems: 'center', gap: 6,
-      background: active ? 'rgba(0,255,136,0.15)' : 'rgba(255,255,255,0.06)',
+      background: active ? 'rgba(249,115,22,0.15)' : 'rgba(255,255,255,0.06)',
       border: active ? '1px solid #f97316' : '1px solid rgba(255,255,255,0.08)',
       color: active ? '#f97316' : '#ccc',
       padding: '6px 10px', borderRadius: 6, cursor: 'pointer',
