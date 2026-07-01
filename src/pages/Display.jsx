@@ -45,6 +45,7 @@ export default function Display() {
   const lastTimeRef = useRef(0);
   const toolbarTimerRef = useRef(null);
   const qrCloseTimerRef = useRef(null);
+  const qrAutoClosedRef = useRef(false);
   const containerRef = useRef(null);
 
   playingRef.current = playing;
@@ -197,19 +198,24 @@ export default function Display() {
     } else {
       clearTimeout(qrCloseTimerRef.current);
       setQrMounted(true);
+      // Si ya está conectado, no cerrar automáticamente
+      if (connected) qrAutoClosedRef.current = true;
       requestAnimationFrame(() => setQrVisible(true));
     }
   }
 
   // ── Auto-close QR on connect ────────────
   useEffect(() => {
-    if (connected && qrMounted) {
+    if (!connected) {
+      qrAutoClosedRef.current = false;
+    } else if (qrMounted && !qrAutoClosedRef.current) {
+      qrAutoClosedRef.current = true;
       setQrVisible(false);
       clearTimeout(qrCloseTimerRef.current);
       qrCloseTimerRef.current = setTimeout(() => setQrMounted(false), 300);
     }
     return () => clearTimeout(qrCloseTimerRef.current);
-  }, [connected]);
+  }, [connected, qrMounted]);
 
   function handleApplyText() {
     const t = modalText.trim();
