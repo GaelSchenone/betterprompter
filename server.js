@@ -136,7 +136,7 @@ wss.on('connection', (ws, req) => {
           const msg = JSON.parse(raw.toString());
           switch (msg.type) {
             case 'speed':
-              session.state.speed = Math.max(0, Math.min(1000, msg.value));
+              session.state.speed = Math.max(-500, Math.min(500, msg.value));
               broadcastToDisplay(session, { type: 'speed', value: session.state.speed });
               break;
             case 'play':

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import {
-  FileText, FlipHorizontal2, Maximize, Scan, X, Check,
+  FileText, FlipHorizontal2, Maximize, QrCode, X, Check,
 } from 'lucide-react';
 
 const SESSION_LENGTH = 6;
@@ -90,7 +90,7 @@ export default function Display() {
               positionRef.current = 0;
               break;
             case 'jump':
-              positionRef.current = Math.max(0, positionRef.current + msg.value * speedRef.current);
+              positionRef.current = Math.max(0, positionRef.current + msg.value * Math.abs(speedRef.current));
               break;
             case 'reset':
               positionRef.current = 0;
@@ -117,6 +117,7 @@ export default function Display() {
       if (playingRef.current && lastTimeRef.current) {
         const dt = (time - lastTimeRef.current) / 1000;
         positionRef.current += speedRef.current * dt;
+        positionRef.current = Math.max(0, positionRef.current);
         el.style.transform = mirrored
           ? `translateY(${-positionRef.current}px) scaleX(-1)`
           : `translateY(${-positionRef.current}px) scaleX(1)`;
@@ -195,7 +196,6 @@ export default function Display() {
         background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(12px)',
         padding: '10px 20px', display: 'flex', alignItems: 'center', gap: 10,
         fontFamily: 'system-ui, sans-serif', fontSize: 13,
-        borderBottom: '1px solid rgba(255,255,255,0.06)',
         transform: showToolbar ? 'translateY(0)' : 'translateY(-100%)',
         transition: 'transform 0.3s ease',
       }}>
@@ -219,7 +219,7 @@ export default function Display() {
 
         <div style={{
           display: 'flex', alignItems: 'center', gap: 6,
-          background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.08)',
+          background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.03)',
           color: '#ccc', padding: '6px 10px', borderRadius: 6, fontSize: 12,
         }}>
           <span style={{ color: '#999', fontSize: 11 }}>A</span>
@@ -230,7 +230,7 @@ export default function Display() {
         </div>
 
         <TBtn onClick={toggleFullscreen} title="Fullscreen (F)"><Maximize size={18} /></TBtn>
-        <TBtn onClick={() => setShowQR(v => !v)} title="QR"><Scan size={18} /></TBtn>
+        <TBtn onClick={() => setShowQR(v => !v)} title="QR"><QrCode size={18} /></TBtn>
       </div>
 
       {/* Scroll text */}
@@ -262,7 +262,7 @@ export default function Display() {
         fontSize: 14, fontVariantNumeric: 'tabular-nums',
         pointerEvents: 'none', opacity: playing ? 1 : 0, transition: 'opacity 0.5s',
       }}>
-        -- {Math.round(speed)} px/s --
+        {speed > 0 ? '>' : speed < 0 ? '<' : '--'} {Math.abs(Math.round(speed))} px/s
       </div>
 
       {/* Hover hint */}
@@ -280,14 +280,30 @@ export default function Display() {
         <div data-stop style={{
           position: 'fixed', bottom: 80, right: 20, zIndex: 50,
           background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(12px)',
-          border: '1px solid rgba(255,255,255,0.08)', borderRadius: 10, padding: 16,
+          border: '1px solid rgba(255,255,255,0.03)', borderRadius: 12, padding: 16,
           textAlign: 'center', fontFamily: 'system-ui, sans-serif',
+          display: 'flex', flexDirection: 'column', alignItems: 'center',
         }}>
-          <img src={qrSrc} alt="QR" style={{ width: 140, height: 140, borderRadius: 4, display: 'block', margin: '0 auto 8px' }} />
-          <div style={{ fontSize: 11, color: '#888' }}>Escanea para controlar</div>
-          <div style={{ fontSize: 11, color: '#00ff88', wordBreak: 'break-all', marginTop: 4 }}>
-            {controlUrl}
+          {/* White-bordered QR image */}
+          <div style={{
+            background: '#fff', padding: 6, borderRadius: 8, marginBottom: 12,
+            lineHeight: 0,
+          }}>
+            <img src={qrSrc} alt="QR" style={{ width: 140, height: 140, display: 'block' }} />
           </div>
+          <div style={{ fontSize: 12, color: '#888', marginBottom: 6 }}>
+            Escanea para controlar
+          </div>
+          <a href={controlUrl} target="_blank" rel="noopener noreferrer"
+            style={{
+              fontSize: 13, color: '#00ff88', textDecoration: 'none',
+              maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap', display: 'block',
+            }}
+            title={controlUrl}
+          >
+            {controlUrl.replace(/^https?:\/\//, '')}
+          </a>
         </div>
       )}
 
@@ -299,7 +315,7 @@ export default function Display() {
           display: 'flex', alignItems: 'center', justifyContent: 'center',
         }} onClick={() => setShowModal(false)}>
           <div style={{
-            background: '#111', border: '1px solid rgba(255,255,255,0.08)',
+            background: '#111', border: '1px solid rgba(255,255,255,0.03)',
             borderRadius: 14, padding: 30, width: '90%', maxWidth: 700,
             maxHeight: '80vh', display: 'flex', flexDirection: 'column',
           }} onClick={e => e.stopPropagation()}>
@@ -310,7 +326,7 @@ export default function Display() {
               placeholder="Pega aca el texto de tu presentacion..."
               style={{
                 flex: 1, minHeight: 300, background: '#1a1a1a',
-                border: '1px solid rgba(255,255,255,0.08)', borderRadius: 8,
+                border: '1px solid rgba(255,255,255,0.03)', borderRadius: 8,
                 color: '#eee', fontSize: 16, lineHeight: 1.6, padding: 16,
                 resize: 'vertical', fontFamily: 'system-ui, sans-serif', outline: 'none',
               }} autoFocus
@@ -347,7 +363,7 @@ function TBtn({ children, onClick, active, title }) {
     <button onClick={onClick} title={title} style={{
       display: 'flex', alignItems: 'center', gap: 6,
       background: active ? 'rgba(0,255,136,0.15)' : 'rgba(255,255,255,0.06)',
-      border: active ? '1px solid #00ff88' : '1px solid rgba(255,255,255,0.08)',
+      border: active ? '1px solid #00ff88' : '1px solid rgba(255,255,255,0.03)',
       color: active ? '#00ff88' : '#ccc',
       padding: '6px 10px', borderRadius: 6, cursor: 'pointer',
       fontSize: 12, fontFamily: 'system-ui, sans-serif',

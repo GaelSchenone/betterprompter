@@ -1,10 +1,5 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
-import {
-  Play, Pause, SkipBack, SkipForward,
-  ChevronLeft, ChevronRight, RotateCcw, RefreshCw,
-  Send, Trash2, Wifi, Check,
-} from 'lucide-react';
 
 function wsUrl(sessionId, role) {
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
@@ -15,15 +10,28 @@ function wsUrl(sessionId, role) {
   return url.toString();
 }
 
+const SPEED_SENSITIVITY = 4; // px/s por pixel de swipe
+const MIN_SPEED = 0;
+const MAX_SPEED = 500;
+
 export default function Control() {
   const { sessionId } = useParams();
   const [connected, setConnected] = useState(false);
-  const [playing, setPlaying] = useState(false);
   const [speed, setSpeed] = useState(120);
+  const [direction, setDirection] = useState(null); // 'forward' | 'backward' | null
+  const [showTextInput, setShowTextInput] = useState(false);
   const [speechText, setSpeechText] = useState('');
   const [sendFeedback, setSendFeedback] = useState(false);
 
   const wsRef = useRef(null);
+  const speedRef = useRef(120);
+  const directionRef = useRef(null);
+  const startYRef = useRef(0);
+  const baseSpeedRef = useRef(120);
+  const scrollingRef = useRef(false);
+
+  speedRef.current = speed;
+  directionRef.current = direction;
 
   // ── WebSocket ──────────────────────────
   useEffect(() => {
@@ -49,8 +57,7 @@ export default function Control() {
           const msg = JSON.parse(e.data);
           if (msg.type === 'state') {
             if (msg.text) setSpeechText(msg.text);
-            setSpeed(msg.speed ?? 120);
-            setPlaying(msg.playing ?? false);
+            setSpeed(Math.abs(msg.speed ?? 120));
           }
         } catch {}
       };
@@ -63,222 +70,292 @@ export default function Control() {
     };
   }, [sessionId]);
 
-  function send(msg) {
+  const send = useCallback((msg) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify(msg));
     }
-  }
+  }, []);
 
-  function togglePlay() {
-    const next = !playing;
-    setPlaying(next);
-    send({ type: next ? 'play' : 'pause' });
-  }
+  // ── Pointer handlers ───────────────────
+  const handlePointerDown = useCallback((dir) => (e) => {
+    e.preventDefault();
+    const el = e.currentTarget;
+    el.setPointerCapture(e.pointerId);
 
-  const speedTimerRef = useRef(null);
-  function handleSpeedChange(val) {
-    const n = Number(val);
-    setSpeed(n);
-    clearTimeout(speedTimerRef.current);
-    speedTimerRef.current = setTimeout(() => send({ type: 'speed', value: n }), 30);
-  }
+    scrollingRef.current = true;
+    directionRef.current = dir;
+    setDirection(dir);
 
-  function jump(seconds) {
-    send({ type: 'jump', value: seconds });
-  }
+    const currentSpeed = speedRef.current;
+    baseSpeedRef.current = currentSpeed;
+    startYRef.current = e.clientY;
 
-  function handleSendText() {
+    // Empezar a scrollear
+    const signedSpeed = dir === 'forward' ? currentSpeed : -currentSpeed;
+    send({ type: 'speed', value: signedSpeed });
+    send({ type: 'play' });
+  }, [send]);
+
+  const handlePointerMove = useCallback((e) => {
+    if (!scrollingRef.current) return;
+    e.preventDefault();
+
+    const deltaY = startYRef.current - e.clientY; // positivo = swipe arriba
+    const adjustment = Math.round(deltaY / SPEED_SENSITIVITY);
+    let newSpeed = baseSpeedRef.current + adjustment;
+    newSpeed = Math.max(MIN_SPEED, Math.min(MAX_SPEED, newSpeed));
+
+    if (newSpeed !== speedRef.current) {
+      speedRef.current = newSpeed;
+      setSpeed(newSpeed);
+
+      const signedSpeed = directionRef.current === 'forward' ? newSpeed : -newSpeed;
+      send({ type: 'speed', value: signedSpeed });
+    }
+  }, [send]);
+
+  const handlePointerUp = useCallback((e) => {
+    if (!scrollingRef.current) return;
+    e.preventDefault();
+
+    scrollingRef.current = false;
+    directionRef.current = null;
+    setDirection(null);
+    send({ type: 'pause' });
+  }, [send]);
+
+  // ── Text send ──────────────────────────
+  const handleSendText = () => {
     const t = speechText.trim();
     if (!t) return;
     send({ type: 'setText', text: t });
     setSendFeedback(true);
     setTimeout(() => setSendFeedback(false), 1500);
-  }
-
-  function handleReconnect() {
-    wsRef.current?.close();
-  }
-
-  const card = {
-    background: '#141414', border: '1px solid rgba(255,255,255,0.06)',
-    borderRadius: 16, padding: '24px 20px', marginBottom: 12,
   };
-  const cardTitle = {
-    fontSize: 11, textTransform: 'uppercase', letterSpacing: 1,
-    color: '#666', marginBottom: 16, fontWeight: 500,
-  };
+
+  // ── Speed label ────────────────────────
+  const speedLabel = speed === 0 ? 'Detenido'
+    : speed <= 60 ? 'Muy lenta'
+    : speed <= 120 ? 'Lenta'
+    : speed <= 200 ? 'Normal'
+    : speed <= 300 ? 'Rapida'
+    : 'Turbo';
 
   return (
     <div style={{
       background: '#0a0a0a', color: '#eee', minHeight: '100dvh',
       fontFamily: 'system-ui, -apple-system, sans-serif',
-      padding: 16, paddingBottom: 40,
+      padding: 12, paddingBottom: 20,
+      display: 'flex', flexDirection: 'column', gap: 8,
+      touchAction: 'none', userSelect: 'none',
+      WebkitUserSelect: 'none',
     }}>
-      {/* Header */}
+      {/* ── Header ── */}
       <div style={{
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        padding: '8px 4px 16px',
+        padding: '4px 4px 0',
       }}>
-        <h1 style={{ fontSize: 18, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8 }}>
-          <MonitorSmartphone /> Control
-        </h1>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12, color: '#666' }}>
+        <div style={{ fontSize: 14, fontWeight: 600, color: '#ccc' }}>
+          BetterPrompter
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#666' }}>
           <span style={{
-            width: 8, height: 8, borderRadius: '50%', flexShrink: 0,
+            width: 6, height: 6, borderRadius: '50%',
             background: connected ? '#00ff88' : '#555',
-            boxShadow: connected ? '0 0 8px #00ff88' : 'none',
-            transition: 'background 0.3s',
+            boxShadow: connected ? '0 0 6px #00ff88' : 'none',
           }} />
           <span>{connected ? 'Conectado' : 'Desconectado'}</span>
         </div>
       </div>
 
-      {/* Play */}
-      <div style={card}>
-        <div style={cardTitle}>Reproduccion</div>
-        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 8 }}>
-          <button onClick={togglePlay} style={{
-            width: 100, height: 100, borderRadius: '50%', border: 'none',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            cursor: 'pointer', touchAction: 'manipulation',
-            background: playing ? '#00ff88' : 'rgba(255,255,255,0.06)',
-            color: playing ? '#000' : '#eee',
-            boxShadow: playing ? '0 0 40px rgba(0,255,136,0.15)' : 'none',
-            transition: 'all 0.15s',
-          }}>
-            {playing ? <Pause size={44} /> : <Play size={44} />}
-          </button>
-        </div>
-      </div>
-
-      {/* Speed */}
-      <div style={card}>
-        <div style={cardTitle}>Velocidad</div>
-        <div style={{ textAlign: 'center', fontSize: 48, fontWeight: 300, fontVariantNumeric: 'tabular-nums', color: '#00ff88', lineHeight: 1, marginBottom: 4 }}>
-          {speed}<span style={{ fontSize: 14, color: '#666', fontWeight: 400 }}> px/s</span>
-        </div>
-        <div style={{ padding: '8px 0' }}>
-          <input type="range" min={0} max={500} step={1} value={speed}
-            onChange={e => handleSpeedChange(e.target.value)}
-            style={{ width: '100%', height: 6, accentColor: '#00ff88', touchAction: 'none' }} />
-        </div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#666', padding: '0 2px', marginTop: 4 }}>
-          <span>0</span><span>125</span><span>250</span><span>375</span><span>500</span>
-        </div>
-        <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
-          {[{ label: 'Lenta', val: 60 }, { label: 'Normal', val: 120 }, { label: 'Rapida', val: 200 }, { label: 'Turbo', val: 300 }].map(p => (
-            <button key={p.val}
-              onClick={() => { setSpeed(p.val); send({ type: 'speed', value: p.val }); }}
-              style={{
-                flex: 1, padding: '10px 0', borderRadius: 10,
-                border: '1px solid rgba(255,255,255,0.06)',
-                background: speed === p.val ? 'rgba(0,255,136,0.08)' : 'transparent',
-                color: speed === p.val ? '#00ff88' : '#666',
-                fontSize: 13, fontWeight: 500, cursor: 'pointer', touchAction: 'manipulation',
-              }}>
-              {p.label}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Jumps */}
-      <div style={card}>
-        <div style={cardTitle}>Saltos</div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 8 }}>
-          {[
-            { icon: SkipBack, label: '-10 s', val: -10 },
-            { icon: ChevronLeft, label: '-5 s', val: -5 },
-            { icon: ChevronRight, label: '+5 s', val: 5 },
-            { icon: SkipForward, label: '+10 s', val: 10 },
-          ].map(j => (
-            <button key={j.val} onClick={() => jump(j.val)} style={{
-              display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4,
-              padding: '14px 0', borderRadius: 10, border: '1px solid rgba(255,255,255,0.06)',
-              background: 'transparent', color: '#eee', fontSize: 13, fontWeight: 500,
-              cursor: 'pointer', touchAction: 'manipulation',
-            }}>
-              <j.icon size={20} style={{ color: '#666' }} />
-              <span style={{ fontSize: 10, color: '#666', fontWeight: 400 }}>{j.label}</span>
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Actions */}
-      <div style={card}>
-        <div style={cardTitle}>Acciones</div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-          <button onClick={() => send({ type: 'reset' })} style={actionBtn}>
-            <RotateCcw size={16} /> Volver al inicio
-          </button>
-          <button onClick={handleReconnect} style={actionBtn}>
-            <RefreshCw size={16} /> Reconectar
-          </button>
-        </div>
-      </div>
-
-      {/* Text */}
-      <div style={card}>
-        <div style={cardTitle}>Texto del speech</div>
-        <textarea value={speechText}
-          onChange={e => setSpeechText(e.target.value)}
-          placeholder="Pega aca tu speech y presiona Enviar..."
-          style={{
-            width: '100%', minHeight: 120, background: '#0a0a0a',
-            border: '1px solid rgba(255,255,255,0.06)', borderRadius: 10,
-            color: '#eee', fontSize: 14, lineHeight: 1.5, padding: 12,
-            resize: 'vertical', fontFamily: 'system-ui, sans-serif', outline: 'none',
-          }} />
-        <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
-          <button onClick={() => { setSpeechText(''); send({ type: 'setText', text: '' }); }}
-            style={{
-              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-              flex: 1, padding: 12, borderRadius: 10, border: '1px solid rgba(255,255,255,0.06)',
-              background: 'rgba(255,255,255,0.04)', color: '#666',
-              fontSize: 14, fontWeight: 500, cursor: 'pointer', touchAction: 'manipulation',
-            }}>
-            <Trash2 size={16} /> Limpiar
-          </button>
-          <button onClick={handleSendText}
-            style={{
-              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-              flex: 1, padding: 12, borderRadius: 10, border: 'none',
-              background: '#00ff88', color: '#000',
-              fontSize: 14, fontWeight: 500, cursor: 'pointer', touchAction: 'manipulation',
-            }}>
-            {sendFeedback ? <Check size={16} /> : <Send size={16} />}
-            {sendFeedback ? 'Enviado' : 'Enviar texto'}
-          </button>
-        </div>
-      </div>
-
-      {/* Help */}
+      {/* ── Speed display ── */}
       <div style={{
-        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-        fontSize: 12, color: '#666', textAlign: 'center', padding: 12,
+        textAlign: 'center', padding: '8px 0 4px',
+        transition: 'opacity 0.15s',
+        opacity: direction ? 1 : 0.6,
       }}>
-        <Wifi size={14} />
-        Asegurate de que el celular y la laptop esten en la misma red
+        <div style={{
+          fontSize: 52, fontWeight: 300, fontVariantNumeric: 'tabular-nums',
+          letterSpacing: -1, color: '#00ff88', lineHeight: 1,
+          transition: 'all 0.1s',
+        }}>
+          {speed}
+          <span style={{ fontSize: 16, color: '#666', fontWeight: 400 }}> px/s</span>
+        </div>
+        <div style={{
+          fontSize: 12, color: '#555', marginTop: 4,
+          letterSpacing: 0.5,
+        }}>
+          {direction === 'forward' ? 'ADELANTE' : direction === 'backward' ? 'ATRAS' : '--'} / {speedLabel}
+        </div>
       </div>
+
+      {/* ── Pedales ── */}
+      <div style={{
+        flex: 1, display: 'flex', gap: 10,
+        minHeight: 0,
+      }}>
+        {/* Boton ATRAS */}
+        <button
+          onPointerDown={handlePointerDown('backward')}
+          onPointerMove={handlePointerMove}
+          onPointerUp={handlePointerUp}
+          onPointerCancel={handlePointerUp}
+          style={{
+            flex: 1, borderRadius: 20, cursor: 'pointer',
+            display: 'flex', flexDirection: 'column', alignItems: 'center',
+            justifyContent: 'center', gap: 8,
+            background: direction === 'backward'
+              ? 'linear-gradient(180deg, rgba(255,255,255,0.12) 0%, rgba(0,0,0,0.3) 100%)'
+              : 'rgba(255,255,255,0.04)',
+            border: direction === 'backward'
+              ? '1px solid rgba(255,255,255,0.15)'
+              : '1px solid rgba(255,255,255,0.03)',
+            transition: 'all 0.1s',
+            touchAction: 'none',
+            WebkitTouchCallout: 'none',
+          }}
+        >
+          {/* Flecha atras animada */}
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 4,
+            opacity: direction === 'backward' ? 1 : 0.4,
+          }}>
+            <Triangle dir="left" />
+            <Triangle dir="left" />
+            <Triangle dir="left" />
+          </div>
+          <span style={{
+            fontSize: 14, fontWeight: 500, letterSpacing: 1,
+            color: direction === 'backward' ? '#fff' : '#666',
+          }}>
+            ATRAS
+          </span>
+        </button>
+
+        {/* Boton ADELANTE */}
+        <button
+          onPointerDown={handlePointerDown('forward')}
+          onPointerMove={handlePointerMove}
+          onPointerUp={handlePointerUp}
+          onPointerCancel={handlePointerUp}
+          style={{
+            flex: 1, borderRadius: 20, cursor: 'pointer',
+            display: 'flex', flexDirection: 'column', alignItems: 'center',
+            justifyContent: 'center', gap: 8,
+            background: direction === 'forward'
+              ? 'linear-gradient(180deg, rgba(0,255,136,0.25) 0%, rgba(0,255,136,0.05) 100%)'
+              : 'rgba(0,255,136,0.04)',
+            border: direction === 'forward'
+              ? '1px solid rgba(0,255,136,0.3)'
+              : '1px solid rgba(0,255,136,0.03)',
+            transition: 'all 0.1s',
+            touchAction: 'none',
+            WebkitTouchCallout: 'none',
+          }}
+        >
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 4,
+            opacity: direction === 'forward' ? 1 : 0.4,
+          }}>
+            <Triangle dir="right" />
+            <Triangle dir="right" />
+            <Triangle dir="right" />
+          </div>
+          <span style={{
+            fontSize: 14, fontWeight: 500, letterSpacing: 1,
+            color: direction === 'forward' ? '#00ff88' : '#666',
+          }}>
+            ADELANTE
+          </span>
+        </button>
+      </div>
+
+      {/* ── Indicador de swipe ── */}
+      {direction && (
+        <div style={{
+          textAlign: 'center', fontSize: 11, color: '#555',
+          padding: '2px 0',
+          animation: 'pulse 0.3s',
+        }}>
+          Desliza hacia arriba para mas velocidad, abajo para menos
+        </div>
+      )}
+
+      {/* ── Botones inferiores ── */}
+      <div style={{ display: 'flex', gap: 8 }}>
+        <button
+          onClick={() => send({ type: 'reset' })}
+          style={bottomBtn}
+        >
+          Volver al inicio
+        </button>
+        <button
+          onClick={() => setShowTextInput(v => !v)}
+          style={bottomBtn}
+        >
+          {showTextInput ? 'Ocultar texto' : 'Editar texto'}
+        </button>
+      </div>
+
+      {/* ── Text input ── */}
+      {showTextInput && (
+        <div style={{
+          background: '#141414', border: '1px solid rgba(255,255,255,0.03)',
+          borderRadius: 16, padding: 16,
+        }}>
+          <textarea
+            value={speechText}
+            onChange={e => setSpeechText(e.target.value)}
+            placeholder="Pega aca tu speech..."
+            style={{
+              width: '100%', minHeight: 100, background: '#0a0a0a',
+              border: '1px solid rgba(255,255,255,0.03)', borderRadius: 10,
+              color: '#eee', fontSize: 14, lineHeight: 1.5, padding: 12,
+              resize: 'vertical', fontFamily: 'system-ui, sans-serif',
+              outline: 'none', touchAction: 'auto',
+            }}
+          />
+          <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+            <button
+              onClick={() => { setSpeechText(''); send({ type: 'setText', text: '' }); }}
+              style={{ ...bottomBtn, flex: 1 }}
+            >
+              Limpiar
+            </button>
+            <button
+              onClick={handleSendText}
+              style={{
+                ...bottomBtn, flex: 1,
+                background: sendFeedback ? '#00ff88' : 'rgba(0,255,136,0.1)',
+                color: sendFeedback ? '#000' : '#00ff88',
+                border: '1px solid rgba(0,255,136,0.2)',
+              }}
+            >
+              {sendFeedback ? 'Enviado' : 'Enviar texto'}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
-function MonitorSmartphone() {
+// ── Componente triangulo ──
+function Triangle({ dir }) {
+  const rotation = dir === 'left' ? 'rotate(180deg)' : 'rotate(0deg)';
   return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#00ff88" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="2" y="3" width="16" height="16" rx="2" />
-      <path d="M2 12h16" />
-      <path d="M18 7h2a2 2 0 012 2v8a2 2 0 01-2 2h-5" />
-      <rect x="18" y="14" width="2" height="2" />
+    <svg width="20" height="20" viewBox="0 0 24 24" style={{ transform: rotation }}>
+      <path d="M5 12l14-8v16L5 12z" fill="currentColor" />
     </svg>
   );
 }
 
-const actionBtn = {
-  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-  padding: '14px 0', borderRadius: 10, border: '1px solid rgba(255,255,255,0.06)',
-  background: 'transparent', color: '#eee',
-  fontSize: 14, fontWeight: 500, cursor: 'pointer', touchAction: 'manipulation',
+// ── Bottom button style ──
+const bottomBtn = {
+  flex: 1, padding: '12px 0', borderRadius: 12,
+  border: '1px solid rgba(255,255,255,0.03)',
+  background: 'rgba(255,255,255,0.03)',
+  color: '#888', fontSize: 13, fontWeight: 500,
+  cursor: 'pointer', fontFamily: 'system-ui, sans-serif',
 };
