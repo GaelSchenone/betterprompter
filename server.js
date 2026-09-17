@@ -4,6 +4,7 @@ import { WebSocketServer } from 'ws';
 import path from 'path';
 import os from 'os';
 import { fileURLToPath } from 'url';
+import speechController from './controllers/speechController.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const distPath = path.join(__dirname, 'dist');
@@ -45,6 +46,7 @@ setInterval(() => {
 // ── Server ────────────────────────────────────────────────
 const app = express();
 const server = http.createServer(app);
+app.use(express.json());
 
 // ── CORS ──────────────────────────────────────────────────
 app.use((_req, res, next) => {
@@ -79,6 +81,8 @@ app.get('/api/info', (_req, res) => {
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', uptime: process.uptime(), sessions: sessions.size });
 });
+
+app.use('/api/speeches', speechController);
 
 // ── SPA: cualquier otra ruta va al index.html ────────────
 app.get('*', (_req, res) => {
